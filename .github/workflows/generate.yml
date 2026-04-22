@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Updated to v4
 
       - name: Set up Python
-        uses: actions/checkout@v3
+        uses: actions/setup-python@v5 # Updated to v5
         with:
           python-version: '3.9'
 
@@ -22,12 +22,11 @@ jobs:
 
       - name: Run AI Bot
         env:
-          # এখানে সিক্রেটটি কোডের এনভায়রনমেন্টে পাস করা হচ্ছে
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python main.py
 
       - name: Upload Video
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4 # এটিই ফিক্স: v3 থেকে v4 করা হয়েছে
         with:
           name: ai-pro-max-video
           path: output/
