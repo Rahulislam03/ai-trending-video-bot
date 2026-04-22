@@ -11,34 +11,34 @@ if not hasattr(PIL.Image, 'ANTIALIAS'):
 from edge_tts import Communicate
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 
-def get_long_story():
-    # ১ মিনিটের উপযোগী বড় গল্প এবং বেশি প্রম্পট
+# ১. রিয়ালিস্টিক স্টোরি ও হাই-কোয়ালিটি প্রম্পট
+def get_realistic_story():
     stories = [
         {
-            "text": """এক সময় এক সুন্দর পাহাড়ের পাদদেশে একটি ছোট্ট গ্রাম ছিল। সেই গ্রামে মিনু নামের একটি মেয়ে তার পোষা বিড়াল ছানার সাথে বাস করত। 
-            একদিন তারা পাহাড়ের চূড়ায় একটি জাদুকরী ঝরনা খুঁজে পেল। সেই ঝরনার পানি ছিল নীল রঙের আর সেখান থেকে সুন্দর গান শোনা যেত। 
-            মিনু যখন ঝরনার পানি স্পর্শ করল, হঠাৎ বনের সব ফুল কথা বলতে শুরু করল! প্রজাপতিরা নাচে মেতে উঠল। 
-            মিনু বুঝতে পারল, প্রকৃতির সাথে বন্ধুত্ব করলে পৃথিবীটা কতই না সুন্দর হয়ে ওঠে। সে খুশিতে নেচে উঠল আর তার বিড়াল ছানাও মিউ মিউ করে গান গাইল।""",
+            "text": """ভবিষ্যতের এক ঢাকা শহর, যেখানে আকাশচুম্বী দালানের ফাঁক দিয়ে উড়ন্ত যান চলাচল করছে। 
+            রাস্তার ধারে রোবটরা মানুষের সাথে কেনাকাটা করছে। প্রযুক্তির এই চরম উৎকর্ষের মাঝেও একটি ছোট ছেলে 
+            পার্কে বসে একটি আসল গাছ লাগানোর চেষ্টা করছে। তার চোখে ছিল এক সুন্দর সবুজ পৃথিবীর স্বপ্ন। 
+            ধীরে ধীরে চারপাশের যান্ত্রিক শহরটি যেন প্রকৃতির ছোঁয়ায় শান্ত হয়ে এল।""",
             "prompts": [
-                "cute girl with a small kitten in a beautiful village near mountains, 3d pixar style, vibrant, 8k",
-                "girl and kitten walking towards a magical mountain, cartoon style, bright sunny day",
-                "finding a magical blue waterfall in the forest, glowing water, 3d animation style, fantasy",
-                "talking colorful flowers in a magical forest, whimsical atmosphere, pixar style",
-                "cute girl dancing with butterflies in a flower garden, happy mood, vibrant colors",
-                "girl and kitten sitting by the waterfall, sunset lighting, cinematic cartoon style"
+                "Hyper-realistic futuristic Dhaka city, neon lights, flying cars, cinematic 8k, photorealistic",
+                "Advanced robots and humans interacting in a hi-tech marketplace, realistic skin textures, 8k",
+                "A young boy planting a real tree in a futuristic metallic park, emotional lighting, hyper-detailed",
+                "Close up of green leaves with raindrops, reflection of a futuristic city in the water drop, macro photography",
+                "A beautiful blend of nature and technology, sunset over a futuristic city, breathtaking view, 8k"
             ]
         }
     ]
     return random.choice(stories)
 
 async def create_voice(text, filename):
-    # NabanitaNeutral এর ভয়েস বেশ স্পষ্ট এবং গল্পের জন্য ভালো
-    communicate = Communicate(text, "bn-BD-NabanitaNeural")
+    # রিয়ালিস্টিক ভিডিওর জন্য 'BashkarNeural' (পুরুষ কণ্ঠ) বেশ গম্ভীর এবং মানানসই
+    communicate = Communicate(text, "bn-BD-BashkarNeural")
     await communicate.save(filename)
 
 def create_image(prompt, filename, retries=3):
     seed = random.randint(1, 999999)
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1920&nologo=true&seed={seed}"
+    # রিয়ালিস্টিক লুকের জন্য 'seed' এবং ডিটেইল্ড প্যারামিটার যোগ করা হয়েছে
+    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1920&nologo=true&seed={seed}&model=flux"
     
     for i in range(retries):
         try:
@@ -48,21 +48,27 @@ def create_image(prompt, filename, retries=3):
                     f.write(r.content)
                 return True
         except Exception as e:
-            print(f"⚠️ ইমেজ এরর: {e}, পুনরায় চেষ্টা চলছে...")
+            print(f"⚠️ চেষ্টা {i+1} ব্যর্থ: {e}")
             time.sleep(5)
     return False
 
-def make_video(image_paths, audio_path, output_path):
-    print("🎬 ১ মিনিটের ভিডিও রেন্ডারিং শুরু হচ্ছে...")
+def make_advanced_video(image_paths, audio_path, output_path):
+    print("🎬 রিয়ালিস্টিক ভিডিও রেন্ডারিং শুরু হচ্ছে...")
     audio = AudioFileClip(audio_path)
-    
-    # অডিওর মোট দৈর্ঘ্যের ওপর ভিত্তি করে প্রতি ছবির সময় নির্ধারণ
     duration_per_img = audio.duration / len(image_paths)
     
     clips = []
-    for img in image_paths:
-        # একটু ধীরগতির জুম ইফেক্ট যাতে ভিডিও লম্বা হলেও স্মুথ থাকে
-        clip = ImageClip(img).set_duration(duration_per_img).resize(lambda t: 1 + 0.05 * t)
+    for i, img in enumerate(image_paths):
+        clip = ImageClip(img).set_duration(duration_per_img)
+        
+        # একেক ছবিতে একেক মোশন (Zoom, Pan) যাতে রিয়ালিস্টিক লাগে
+        if i % 2 == 0:
+            # হালকা জুম ইন
+            clip = clip.resize(lambda t: 1 + 0.03 * t)
+        else:
+            # হালকা জুম আউট (মোশন ডাইভার্সিটি)
+            clip = clip.resize(lambda t: 1.1 - 0.03 * t)
+            
         clips.append(clip)
     
     final_video = concatenate_videoclips(clips, method="compose").set_audio(audio)
@@ -70,24 +76,24 @@ def make_video(image_paths, audio_path, output_path):
 
 async def main():
     os.makedirs('output', exist_ok=True)
-    story_data = get_long_story()
+    story_data = get_realistic_story()
     
-    print("🔊 লং ভয়েসওভার তৈরি হচ্ছে...")
+    print("🔊 রিয়ালিস্টিক ভয়েস তৈরি হচ্ছে...")
     await create_voice(story_data['text'], "voice.mp3")
     
     img_list = []
-    print(f"🎨 {len(story_data['prompts'])}টি ছবি জেনারেট হচ্ছে...")
+    print(f"🎨 {len(story_data['prompts'])}টি রিয়ালিস্টিক ছবি জেনারেট হচ্ছে...")
     for i, p in enumerate(story_data['prompts']):
         path = f"img_{i}.jpg"
         if create_image(p, path):
             img_list.append(path)
     
     if len(img_list) > 0:
-        make_video(img_list, "voice.mp3", "output/final_video.mp4")
-        print(f"🚀 ভিডিও তৈরি সম্পন্ন! দৈর্ঘ্য: {AudioFileClip('voice.mp3').duration:.2f} সেকেন্ড")
+        make_advanced_video(img_list, "voice.mp3", "output/final_video.mp4")
+        print(f"🚀 রিয়ালিস্টিক ভিডিও তৈরি সম্পন্ন!")
     else:
         print("❌ ছবি তৈরিতে ব্যর্থ।")
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
+            
