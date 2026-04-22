@@ -23,7 +23,7 @@ else:
 
 async def generate_viral_content():
     """Gemini এআই ট্রেন্ডিং স্টোরি ও সিনেমাটিক প্রম্পট বানাবে"""
-    # মডেল নাম ফিক্স: অনেক সময় v1beta এ flash-001 বা শুধু flash কাজ করে
+    # মডেল নাম ফিক্স: অনেক সময় v1beta এ flash-001 বা শুধু flash কাজ ক
     model = genai.GenerativeModel('gemini-1.5-flash')
     
     prompt = """
