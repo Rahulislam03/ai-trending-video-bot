@@ -1,133 +1,65 @@
 import os
-import asyncio
-import requests
-import random
-import PIL.Image
-import google.generativeai as genai
-from edge_tts import Communicate
-from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
+import time
+from gtts import gTTS
+from moviepy.editor import ImageClip, AudioFileClip, CompositeVideoClip
 
-# Pillow compatibility fix
-if not hasattr(PIL.Image, 'LANCZOS'):
-    PIL.Image.LANCZOS = PIL.Image.Resampling.LANCZOS
+# --- কনফিগারেশন ---
+CHARACTER_DIR = "Characters"
+OUTPUT_DIR = "output_videos"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# --- API Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+# ক্যারেক্টার লিস্ট (আপনার আপলোড করা ফাইলের নামের সাথে মিলিয়ে নিন)
+CHARACTERS = {
+    "hashem": os.path.join(CHARACTER_DIR, "hashem.png"),
+    "kasem": os.path.join(CHARACTER_DIR, "kasem.png"),
+    "kuddus": os.path.join(CHARACTER_DIR, "kuddus.png")
+}
 
-# ==========================================
-# --- স্থায়ী চরিত্রদের প্রোফাইল (The Squad) ---
-# ==========================================
-CHARACTERS_INFO = """
-1. Hashem (হাশেম): Short, fat, round face, small tuft of hair, wearing lungi and punjabi.
-2. Kasem (কাশেম): Very tall and skinny, wearing big round glasses and a red t-shirt.
-3. Montu (মন্টু): Kid-like short character, wearing a bright yellow t-shirt, messy hair.
-4. Kuddus (কুদ্দুস): Elderly man with a white beard, wearing a skullcap (topi), holding a walking stick.
-"""
+class AIVideoBot:
+    def __init__(self):
+        print("🤖 AI Trending Video Bot স্টার্ট হচ্ছে...")
 
-VISUAL_STYLE = "Minimalist 2D cartoon, simple stickman-like characters, thin black outlines, flat colors, white background, funny Bengali aesthetics."
+    def generate_audio(self, text, filename):
+        """টেক্সট থেকে বাংলা ভয়েস তৈরি করে"""
+        tts = gTTS(text=text, lang='bn')
+        audio_path = os.path.join(OUTPUT_DIR, f"{filename}.mp3")
+        tts.save(audio_path)
+        return audio_path
 
-async def generate_cartoon_content():
-    """Gemini এখন স্থায়ী চরিত্রদের নিয়ে গল্প ও প্রম্পট বানাবে"""
-    model = genai.GenerativeModel('models/gemini-1.5-flash')
-    
-    prompt = f"""
-    Characters List:
-    {CHARACTERS_INFO}
-    
-    Task:
-    1. Create a 45-second funny Bengali comedy script using any 2 or 3 characters from the list above.
-    2. The script should be a dialogue: (e.g. হাশেম: [কথা], কাশেম: [কথা]).
-    3. Provide 6 image prompts in English. 
-       Each prompt MUST describe the characters exactly as defined above in a "{VISUAL_STYLE}" setting.
-    4. Suggest a Viral Title and 5 Hashtags.
-    
-    Format:
-    TITLE: [Title]
-    TAGS: [Hashtags]
-    STORY: [Bengali Script]
-    PROMPTS:
-    1. [Prompt 1] ... 6. [Prompt 6]
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        content = response.text
-        title = content.split("TITLE:")[1].split("TAGS:")[0].strip()
-        tags = content.split("TAGS:")[1].split("STORY:")[0].strip()
-        story = content.split("STORY:")[1].split("PROMPTS:")[0].strip()
-        prompts_raw = content.split("PROMPTS:")[1].strip().split("\n")
-        prompts = [p.split(".", 1)[1].strip() for p in prompts_raw if "." in p]
-        return title, tags, story, prompts[:6]
-    except Exception as e:
-        print(f"⚠️ Gemini Error: {e}")
-        return "Bangla Comedy", "#Funny", "হাশেম: কিরে কাশেম, তুই কি করিস? কাশেম: ভাই এআই দিয়ে কার্টুন বানাই!", ["2D minimalist funny characters, white background"]
+    def create_video(self, char_name, script_text, output_name):
+        """ছবি এবং অডিও মিলিয়ে ভিডিও তৈরি করে"""
+        if char_name not in CHARACTERS or not os.path.exists(CHARACTERS[char_name]):
+            print(f"❌ এরর: {char_name} এর ছবি Characters ফোল্ডারে পাওয়া যায়নি!")
+            return
 
-async def create_voice(text):
-    filename = "voice.mp3"
-    # সংলাপ থেকে নামগুলো বাদ দিয়ে পরিষ্কার টেক্সট তৈরি
-    clean_text = text.replace("হাশেম:", "").replace("কাশেম:", "").replace("মন্টু:", "").replace("কুদ্দুস:", "")
-    communicate = Communicate(clean_text, "bn-BD-PradeepNeural")
-    await communicate.save(filename)
-    return filename
+        print(f"🎬 {char_name} এর জন্য ভিডিও তৈরি হচ্ছে...")
+        
+        # ১. অডিও তৈরি
+        audio_path = self.generate_audio(script_text, output_name)
+        audio_clip = AudioFileClip(audio_path)
 
-def create_image(prompt, index):
-    filename = f"img_{index}.jpg"
-    # Pollinations Flux Model for Clean 2D Look
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1080&nologo=true&seed={random.randint(1,10**9)}&model=flux"
-    try:
-        r = requests.get(url, timeout=60)
-        if r.status_code == 200:
-            with open(filename, 'wb') as f:
-                f.write(r.content)
-            with PIL.Image.open(filename) as img:
-                img.convert("RGB").resize((1080, 1080)).save(filename)
-            return filename
-    except: return None
+        # ২. ভিডিও ক্লিপ তৈরি (অডিওর দৈর্ঘ্য অনুযায়ী)
+        img_clip = ImageClip(CHARACTERS[char_name]).set_duration(audio_clip.duration)
+        video = img_clip.set_audio(audio_clip)
 
-def make_video(image_paths, audio_path):
-    output_path = "output/bangla_cartoon_final.mp4"
-    audio = AudioFileClip(audio_path)
-    duration_per_img = audio.duration / len(image_paths)
-    
-    clips = []
-    for img in image_paths:
-        clip = ImageClip(img).set_duration(duration_per_img).set_fps(30)
-        clips.append(clip)
-    
-    final_video = concatenate_videoclips(clips, method="compose").set_audio(audio)
-    final_video.write_videofile(
-        output_path, 
-        fps=30, 
-        codec="libx264", 
-        audio_codec="aac", 
-        bitrate="5000k",
-        ffmpeg_params=["-pix_fmt", "yuv420p"]
-    )
-    return output_path
+        # ৩. সেভ করা
+        final_output = os.path.join(OUTPUT_DIR, f"{output_name}.mp4")
+        video.write_videofile(final_output, fps=24, codec="libx264")
+        print(f"✅ ভিডিও রেডি: {final_output}")
 
-async def main():
-    os.makedirs('output', exist_ok=True)
-    print("🎭 হাশেম-কাশেমের নতুন গল্প তৈরি হচ্ছে...")
-    title, tags, story, prompts = await generate_cartoon_content()
-    
-    print("🎙️ ভয়েসওভার রেকর্ড হচ্ছে...")
-    voice_file = await create_voice(story)
-    
-    print("🎨 ২ডি ক্যারেক্টার জেনারেট হচ্ছে...")
-    img_list = []
-    for i, p in enumerate(prompts):
-        img_path = create_image(p, i)
-        if img_path: img_list.append(img_path)
-    
-    if img_list:
-        print("🎬 ভিডিও রেন্ডার হচ্ছে...")
-        make_video(img_list, voice_file)
-        with open("output/metadata.txt", "w", encoding="utf-8") as f:
-            f.write(f"Title: {title}\nTags: {tags}\n\nStory:\n{story}")
-        print(f"✅ সম্পন্ন! টাইটেল: {title}")
-
+# --- মেইন প্রোগ্রাম ---
 if __name__ == "__main__":
-    asyncio.run(main())
+    bot = AIVideoBot()
+
+    # আপনার গল্পের স্ক্রিপ্ট এখানে লিখুন
+    story_script = [
+        {"char": "hashem", "text": "কিরে কাশেম, তোর নাকি নতুন চশমা খুব ট্রেন্ডিং এ আছে?"},
+        {"char": "kasem", "text": "আরে হাসেম ভাই, এই চশমা পরলে নাকি এ আই ভিডিও ভাইরাল হয়!"}
+    ]
+
+    # প্রতিটি লাইনের জন্য আলাদা ভিডিও তৈরি (পরে আপনি চাইলে সব জোড়া দিতে পারেন)
+    for i, line in enumerate(story_script):
+        bot.create_video(line["char"], line["text"], f"scene_{i}")
+
+    print("\n🚀 সব ভিডিও তৈরি শেষ! output_videos ফোল্ডার চেক করুন।")
     
