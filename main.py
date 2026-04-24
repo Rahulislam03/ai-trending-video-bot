@@ -3,38 +3,38 @@ import asyncio
 import requests
 import random
 import PIL.Image
-import time
 import google.generativeai as genai
-
-# আধুনিক Pillow ভার্সনের জন্য ফিক্স
-if not hasattr(PIL.Image, 'Resampling'):
-    PIL.Image.Resampling = PIL.Image
-
 from edge_tts import Communicate
 from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
 
-# --- এপিআই কনফিগারেশন ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Pillow Resampling Fix
+if not hasattr(PIL.Image, 'LANCZOS'):
+    PIL.Image.LANCZOS = PIL.Image.Resampling.LANCZOS
 
-if not GEMINI_API_KEY:
-    print("❌ Error: GEMINI_API_KEY missing in GitHub Secrets!")
-else:
+# --- API Configuration ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-async def generate_viral_content():
-    """Gemini এআই ট্রেন্ডিং স্টোরি ও সিনেমাটিক প্রম্পট বানাবে"""
-    # মডেল নাম ফিক্স: অনেক সময় v1beta এ flash-001 বা শুধু flash কাজ ক
-    model = genai.GenerativeModel('gemini-1.5-flash')
+async def generate_cartoon_story():
+    """Gemini ২-৩টি চরিত্রের মজার কথোপকথন এবং ২ডি কার্টুন প্রম্পট বানাবে"""
+    model = genai.GenerativeModel('models/gemini-1.5-flash')
     
     prompt = """
-    Identify a viral story for April 2026.
-    1. Write a 50-60 second engaging video script in Bengali.
-    2. Provide 6 high-quality cinematic image prompts in English.
-    3. Suggest a Viral Title and Tags.
+    Create a funny 45-second Bengali conversation between 2 or 3 cartoon characters.
+    Style: Minimalist 2D (like Stickman/Bangla Cartoon).
+    Characters: Character A (Funny), Character B (Serious/Confused).
+    
+    Instructions:
+    1. Write the script as a dialogue (e.g., A: [dialogue], B: [dialogue]).
+    2. Provide 6 image prompts in English. 
+       Crucially, each prompt must describe: "2D minimalist cartoon, two funny stickman-like characters with big eyes talking, thin black outlines, flat colors, white background, comic style."
+    3. Suggest a Viral Title and Hashtags.
+    
     Format:
     TITLE: [Title]
     TAGS: [Hashtags]
-    STORY: [Bengali Script]
+    STORY: [Bengali Dialogue Script]
     PROMPTS:
     1. [Prompt 1] ... 6. [Prompt 6]
     """
@@ -47,78 +47,67 @@ async def generate_viral_content():
         story = content.split("STORY:")[1].split("PROMPTS:")[0].strip()
         prompts_raw = content.split("PROMPTS:")[1].strip().split("\n")
         prompts = [p.split(".", 1)[1].strip() for p in prompts_raw if "." in p]
-        return title, tags, story, prompts[:6] # ৬টি ছবি সেফ সাইড
+        return title, tags, story, prompts[:6]
     except Exception as e:
-        print(f"⚠️ Gemini Error: {e}")
-        return "Future Vision 2026", "#AI", "২০২৬ সালের নতুন জগত...", ["Futuristic city, 8k"]
+        print(f"⚠️ Error: {e}")
+        return "Funny Talk", "#Cartoon", "চরিত্র ১: কিরে কি করিস? চরিত্র ২: এআই দিয়ে ভিডিও বানাই!", ["2D minimalist cartoon, two characters talking, white background"]
 
 async def create_voice(text):
     filename = "voice.mp3"
-    communicate = Communicate(text, "bn-BD-PradeepNeural")
+    # সংলাপ থেকে নামগুলো বাদ দিয়ে শুধু কথাগুলো রেকর্ড করা
+    clean_text = text.replace("Character A:", "").replace("Character B:", "").replace("চরিত্র ১:", "").replace("চরিত্র ২:", "")
+    communicate = Communicate(clean_text, "bn-BD-PradeepNeural")
     await communicate.save(filename)
     return filename
 
-def create_image(prompt, index):
+def create_cartoon_image(prompt, index):
     filename = f"img_{index}.jpg"
-    seed = random.randint(1, 10**9)
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1920&nologo=true&seed={seed}&model=flux"
+    # Pollinations Flux Model for Clean 2D Look
+    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?width=1080&height=1080&nologo=true&seed={random.randint(1,10**9)}&model=flux"
     try:
         r = requests.get(url, timeout=60)
         if r.status_code == 200:
             with open(filename, 'wb') as f:
                 f.write(r.content)
-            # মেমরি ফিক্সের জন্য ইমেজটি প্রি-প্রসেস করা
+            # Resize and Clean
             with PIL.Image.open(filename) as img:
-                img.convert("RGB").save(filename)
+                img.convert("RGB").resize((1080, 1080)).save(filename)
             return filename
     except: return None
 
-def make_pro_max_video(image_paths, audio_path):
-    output_path = "output/pro_max_video_2026.mp4"
+def make_cartoon_video(image_paths, audio_path):
+    output_path = "output/funny_cartoon_2026.mp4"
     audio = AudioFileClip(audio_path)
     duration_per_img = audio.duration / len(image_paths)
     
     clips = []
-    for i, img in enumerate(image_paths):
-        # Resize লজিক পরিবর্তন করা হয়েছে Broken Pipe এরর এড়াতে
+    for img in image_paths:
+        # কার্টুনের জন্য জুম ইফেক্ট ছাড়া ক্লিন কাট ভালো লাগে
         clip = ImageClip(img).set_duration(duration_per_img).set_fps(30)
-        
-        # জুম ইফেক্টকে আরও স্থিতিশীল করা
-        if i % 2 == 0:
-            clip = clip.resize(lambda t: 1 + 0.04 * t)
-        else:
-            clip = clip.resize(lambda t: 1.1 - 0.04 * t)
-        clips.append(clip.crossfadein(0.5))
+        clips.append(clip)
     
     final_video = concatenate_videoclips(clips, method="compose").set_audio(audio)
-    
-    # threads=1 এবং পিক্সেল ফরম্যাট ফিক্স যাতে FFMPEG ক্রাশ না করে
-    final_video.write_videofile(
-        output_path, 
-        fps=30, 
-        codec="libx264", 
-        audio_codec="aac", 
-        bitrate="5000k", # বিটরেট কিছুটা কমানো হয়েছে স্ট্যাবিলিটির জন্য
-        temp_audiofile='temp-audio.m4a',
-        remove_temp=True,
-        ffmpeg_params=["-pix_fmt", "yuv420p"]
-    )
+    final_video.write_videofile(output_path, fps=30, codec="libx264", audio_codec="aac", bitrate="5000k")
     return output_path
 
 async def main():
     os.makedirs('output', exist_ok=True)
-    title, tags, story, prompts = await generate_viral_content()
+    print("🎭 এআই কার্টুন স্টোরি ও সংলাপ তৈরি করছে...")
+    title, tags, story, prompts = await generate_cartoon_story()
+    
+    print(f"🎙️ সংলাপ রেকর্ড হচ্ছে...")
     voice_file = await create_voice(story)
     
+    print("🎨 ২ডি কার্টুন ক্যারেক্টার জেনারেট হচ্ছে...")
     img_list = []
     for i, p in enumerate(prompts):
-        img_path = create_image(p, i)
+        img_path = create_cartoon_image(p, i)
         if img_path: img_list.append(img_path)
     
     if img_list:
-        make_pro_max_video(img_list, voice_file)
-        print("🚀 ভিডিও তৈরি সম্পন্ন!")
+        print("🎬 কার্টুন ভিডিও রেন্ডার হচ্ছে...")
+        make_cartoon_video(img_list, voice_file)
+        print(f"✅ সম্পন্ন! টাইটেল: {title}")
 
 if __name__ == "__main__":
     asyncio.run(main())
-        
