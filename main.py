@@ -9,7 +9,6 @@ HISTORY_FILE = "upload_history.txt"
 LOGO_FILE = "mixveo_logo.png" 
 OUTPUT_DIR = "processed_videos"
 
-# ডিরেক্টরি নিশ্চিত করা
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_history():
@@ -23,8 +22,6 @@ def save_to_history(video_id):
         f.write(f"{video_id}\n")
 
 def process_video(video_path, video_id):
-    """ভিডিওতে লোগো বসানো এবং স্পেশাল ক্যারেক্টার ফিক্স করা"""
-    # ফাইলের নাম থেকে আজেবাজে চিহ্ন মুছে ফেলা
     clean_id = re.sub(r'[^a-zA-Z0-9]', '_', str(video_id))
     output_file = os.path.join(OUTPUT_DIR, f"final_{clean_id}.mp4")
     
@@ -39,10 +36,8 @@ def process_video(video_path, video_id):
                     .set_pos(("right", "top")))
             final = CompositeVideoClip([clip, logo])
         else:
-            print("⚠️ লোগো ফাইল পাওয়া যায়নি!")
             final = clip
 
-        # প্রসেসিং (libx264 দিয়ে দ্রুত করার চেষ্টা)
         final.write_videofile(output_file, codec="libx264", audio_codec="aac", fps=24, logger=None)
         clip.close()
         return output_file
@@ -53,25 +48,26 @@ def process_video(video_path, video_id):
 def start_bot():
     history = get_history()
     
-    # এক্সহ্যামস্টারের জন্য উন্নত সেটিংস
+    # এরর ফিক্স: impersonate বাদ দিয়ে Headers ব্যবহার করা হচ্ছে
     ydl_opts = {
-        'extract_flat': False, 
+        'extract_flat': False,
         'quiet': False,
         'no_warnings': False,
         'ignoreerrors': True,
-        'impersonate': 'chrome', # ব্রাউজার ইমপার্সোনেট (curl_cffi লাগবে)
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
         }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        print(f"🔍 {TARGET_URL} থেকে ভিডিও স্ক্যান করা হচ্ছে...")
+        print(f"🔍 {TARGET_URL} চেক করা হচ্ছে...")
         try:
             info = ydl.extract_info(TARGET_URL, download=False)
             
             if not info or 'entries' not in info:
-                print("❌ কোনো ভিডিও পাওয়া যায়নি! সাইট হয়তো বট ব্লক করেছে।")
+                print("❌ কোনো ভিডিও খুঁজে পাওয়া যায়নি।")
                 return
 
             for entry in info['entries']:
@@ -79,31 +75,28 @@ def start_bot():
                 
                 v_id = entry.get('id')
                 if not v_id or v_id in history:
-                    print(f"⏭️ স্কিপ বা আগে করা হয়েছে: {v_id}")
                     continue
 
-                print(f"🚀 নতুন ভিডিও পাওয়া গেছে: {entry.get('title', 'Unknown')}")
+                print(f"🚀 নতুন ভিডিও: {entry.get('title')}")
                 video_url = entry.get('webpage_url') or entry.get('url')
                 temp_video = "temp_raw.mp4"
                 
                 # ডাউনলোড
-                with yt_dlp.YoutubeDL({'outtmpl': temp_video, 'impersonate': 'chrome'}) as ydl_d:
+                with yt_dlp.YoutubeDL({'outtmpl': temp_video, 'quiet': True}) as ydl_d:
                     ydl_d.download([video_url])
                 
-                # প্রসেসিং
+                # এডিট
                 if os.path.exists(temp_video):
-                    result = process_video(temp_video, v_id)
-                    if result:
+                    if process_video(temp_video, v_id):
                         save_to_history(v_id)
-                        print(f"✅ সফল: {result}")
+                        print("✅ কাজ শেষ!")
                     
-                    if os.path.exists(temp_video):
-                        os.remove(temp_video)
-                    break # গিটহাব মেমোরি বাঁচাতে একবারে একটিই যথেষ্ট।
+                    os.remove(temp_video)
+                    break 
                     
         except Exception as e:
-            print(f"❌ ক্রাউলিং এরর: {e}")
+            print(f"❌ এরর: {e}")
 
 if __name__ == "__main__":
     start_bot()
-    
+        
