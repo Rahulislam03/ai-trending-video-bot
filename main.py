@@ -23,95 +23,87 @@ def save_to_history(video_id):
         f.write(f"{video_id}\n")
 
 def process_video(video_path, video_id):
-    """ভিডিওতে লোগো বসানো এবং ফাইল নাম ঠিক করা"""
-    
-    # এরর ফিক্স: আইডি থেকে স্পেশাল ক্যারেক্টার মুছে পরিষ্কার ফাইলের নাম তৈরি করা
+    """ভিডিওতে লোগো বসানো এবং স্পেশাল ক্যারেক্টার ফিক্স করা"""
+    # ফাইলের নাম থেকে আজেবাজে চিহ্ন মুছে ফেলা
     clean_id = re.sub(r'[^a-zA-Z0-9]', '_', str(video_id))
     output_file = os.path.join(OUTPUT_DIR, f"final_{clean_id}.mp4")
     
     try:
-        print(f"🎬 প্রসেসিং শুরু হচ্ছে: {output_file}")
+        print(f"🎬 প্রসেসিং শুরু: {output_file}")
         clip = VideoFileClip(video_path)
         
-        # লোগো সেটআপ
         if os.path.exists(LOGO_FILE):
             logo = (ImageClip(LOGO_FILE)
                     .set_duration(clip.duration)
                     .resize(height=50) 
-                    .margin(right=10, top=10, opacity=0)
                     .set_pos(("right", "top")))
             final = CompositeVideoClip([clip, logo])
         else:
-            print("⚠️ লোগো পাওয়া যায়নি, লোগো ছাড়াই এডিট হচ্ছে।")
+            print("⚠️ লোগো ফাইল পাওয়া যায়নি!")
             final = clip
 
-        # মেমোরি এবং এরর হ্যান্ডলিং এর জন্য logger=None ও temp_audiofile ব্যবহার
+        # প্রসেসিং (libx264 দিয়ে দ্রুত করার চেষ্টা)
         final.write_videofile(output_file, codec="libx264", audio_codec="aac", fps=24, logger=None)
-        
-        # মেমোরি খালি করা
         clip.close()
-        if hasattr(final, 'close'): final.close()
-        
         return output_file
     except Exception as e:
-        print(f"❌ ভিডিও প্রসেসিং এরর: {str(e)}")
+        print(f"❌ এডিটিং এরর: {e}")
         return None
 
 def start_bot():
     history = get_history()
     
+    # এক্সহ্যামস্টারের জন্য উন্নত সেটিংস
     ydl_opts = {
-        'extract_flat': 'in_playlist',
-        'quiet': True,
-        'no_warnings': True,
-        'ignoreerrors': True
+        'extract_flat': False, 
+        'quiet': False,
+        'no_warnings': False,
+        'ignoreerrors': True,
+        'impersonate': 'chrome', # ব্রাউজার ইমপার্সোনেট (curl_cffi লাগবে)
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        }
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        print(f"🔍 {TARGET_URL} থেকে ভিডিও চেক করা হচ্ছে...")
+        print(f"🔍 {TARGET_URL} থেকে ভিডিও স্ক্যান করা হচ্ছে...")
         try:
-            result = ydl.extract_info(TARGET_URL, download=False)
+            info = ydl.extract_info(TARGET_URL, download=False)
             
-            if result and 'entries' in result:
-                for entry in result['entries']:
-                    if not entry: continue
-                    
-                    v_id = entry.get('id') or entry.get('url')
-                    if not v_id: continue
+            if not info or 'entries' not in info:
+                print("❌ কোনো ভিডিও পাওয়া যায়নি! সাইট হয়তো বট ব্লক করেছে।")
+                return
 
-                    if v_id in history:
-                        print(f"⏭️ স্কিপ: {v_id}")
-                        continue
+            for entry in info['entries']:
+                if not entry: continue
+                
+                v_id = entry.get('id')
+                if not v_id or v_id in history:
+                    print(f"⏭️ স্কিপ বা আগে করা হয়েছে: {v_id}")
+                    continue
 
-                    print(f"🚀 নতুন ভিডিও পাওয়া গেছে! আইডি: {v_id}")
+                print(f"🚀 নতুন ভিডিও পাওয়া গেছে: {entry.get('title', 'Unknown')}")
+                video_url = entry.get('webpage_url') or entry.get('url')
+                temp_video = "temp_raw.mp4"
+                
+                # ডাউনলোড
+                with yt_dlp.YoutubeDL({'outtmpl': temp_video, 'impersonate': 'chrome'}) as ydl_d:
+                    ydl_d.download([video_url])
+                
+                # প্রসেসিং
+                if os.path.exists(temp_video):
+                    result = process_video(temp_video, v_id)
+                    if result:
+                        save_to_history(v_id)
+                        print(f"✅ সফল: {result}")
                     
-                    video_url = entry.get('url')
-                    temp_name = f"temp_video.mp4"
+                    if os.path.exists(temp_video):
+                        os.remove(temp_video)
+                    break # গিটহাব মেমোরি বাঁচাতে একবারে একটিই যথেষ্ট।
                     
-                    # ভিডিও ডাউনলোড
-                    download_opts = {'outtmpl': temp_name, 'quiet': True}
-                    with yt_dlp.YoutubeDL(download_opts) as ydl_down:
-                        ydl_down.download([video_url])
-                    
-                    # ভিডিও এডিটিং
-                    if os.path.exists(temp_name):
-                        processed_path = process_video(temp_name, v_id)
-                        
-                        if processed_path:
-                            save_to_history(v_id)
-                            print(f"✅ সফলভাবে তৈরি হয়েছে: {processed_path}")
-                        
-                        # টেম্পোরারি ফাইল ডিলিট
-                        if os.path.exists(temp_name):
-                            os.remove(temp_name)
-                        
-                        # গিটহাব অ্যাকশনের মেমোরি লিমিটের জন্য একবারে একটি ভিডিওই যথেষ্ট
-                        break 
-            else:
-                print("❌ কোনো নতুন ভিডিও পাওয়া যায়নি।")
         except Exception as e:
-            print(f"❌ এরর: {str(e)}")
+            print(f"❌ ক্রাউলিং এরর: {e}")
 
 if __name__ == "__main__":
     start_bot()
-        
+    
