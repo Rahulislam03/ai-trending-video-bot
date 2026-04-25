@@ -1,13 +1,15 @@
-name: AI Video Bot Pro Max Plus
+name: Video Mirroring Bot
 
 on:
-  workflow_dispatch:
+  schedule:
+    - cron: '0 */12 * * *' # প্রতি ১২ ঘণ্টা পর পর অটো চলবে
+  workflow_dispatch: # ম্যানুয়ালি রান করার অপশন
 
 jobs:
-  build:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -15,25 +17,22 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install System Dependencies
+      - name: Install FFmpeg & ImageMagick
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg imagemagick
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      - name: Run AI Bot
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: Run Mirror Bot
         run: python main.py
 
-      - name: Upload Video
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-pro-max-video
-          path: output_videos/  # এখানে path ফিক্স করা হয়েছে
-          if-no-files-found: error
+      - name: Auto Save History to GitHub
+        run: |
+          git config --global user.name "Islam Rahul"
+          git config --global user.email "rahul@mixveo.com"
+          git add upload_history.txt
+          git commit -m "Update upload history [skip ci]" || echo "No changes to commit"
+          git push
           
