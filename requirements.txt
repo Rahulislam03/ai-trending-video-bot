@@ -4,3 +4,4 @@ Pillow==9.5.0
 requests
 google-generativeai
 gTTS
+yt-dlp
